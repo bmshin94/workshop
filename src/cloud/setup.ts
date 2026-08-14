@@ -19,6 +19,7 @@ interface ParsedArgs {
   apiKey: string | null;
   skillsRef: string | null;
   registryFile: string | null;
+  projectId: string | null;
 }
 
 /** Reject an explicitly empty `--flag=` value (a usage error rather than a
@@ -56,6 +57,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     apiKey: null,
     skillsRef: null,
     registryFile: null,
+    projectId: null,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -74,6 +76,8 @@ function parseArgs(argv: string[]): ParsedArgs {
     else if (arg === "--skills-ref") out.skillsRef = takeValue(argv, i++, arg);
     else if (arg.startsWith("--registry-file=")) out.registryFile = requireValue("--registry-file", arg.slice("--registry-file=".length));
     else if (arg === "--registry-file") out.registryFile = takeValue(argv, i++, arg);
+    else if (arg.startsWith("--project=")) out.projectId = requireValue("--project", arg.slice("--project=".length));
+    else if (arg === "--project") out.projectId = takeValue(argv, i++, arg);
     else if (arg === "-h" || arg === "--help") {
       printCloudSetupHelp();
       process.exit(0);
@@ -102,6 +106,9 @@ FLAGS
     --local             Install only for --cwd / current project
     --scope=<scope>     global | local
     --cwd=<dir>         Project directory (default: current directory)
+    --project=<slug>    Scope events to a Raindrop project. Carried into the
+                        printed setup prompt so the skill writes the slug into
+                        your SDK call — nothing is persisted to config.
     --api-key=<key>     Authenticate non-interactively with an org API key
                         (or set RAINDROP_API_KEY). Skips the browser.
     --server-url=<url>  Override the hosted MCP endpoint (advanced / staging).
@@ -148,6 +155,7 @@ export function buildSummaryLines(
   envGitignored: boolean,
   succeeded: boolean,
   envPath: string,
+  projectId?: string | null,
 ): string[] {
   const agents = result.items.map((item) => item.agent).join(", ");
   const lines = [
@@ -176,12 +184,31 @@ export function buildSummaryLines(
   }
 
   if (succeeded) {
-    lines.push(
-      "",
-      "Next steps:",
-      "  Run /raindrop-setup inside your AI coding agent to instrument for Raindrop Cloud.",
-      `  Then watch events arrive at ${APP_ORIGIN}.`,
-    );
+    // The project rides the setup prompt rather than any config file: the slug
+    // belongs as a literal in the SDK call the skill writes, so it stays
+    // visible in review and can't drift from the code that sends the events.
+    // A full paste-able sentence, not a `/raindrop-setup project=…` argument:
+    // the skill is installed across many agent harnesses and only some support
+    // slash-command arguments, but every one of them loads the skill from a
+    // plain-language request and keeps the slug in the model's context.
+    if (projectId) {
+      lines.push(
+        "",
+        "Next steps:",
+        "  Paste this into your AI coding agent:",
+        "",
+        "    Set up Raindrop monitoring in this project using the raindrop-setup",
+        `    skill. Scope all events to the Raindrop project with ID '${projectId}'.`,
+        "",
+      );
+    } else {
+      lines.push(
+        "",
+        "Next steps:",
+        "  Run /raindrop-setup inside your AI coding agent to instrument for Raindrop Cloud.",
+      );
+    }
+    lines.push(`  Then watch events arrive at ${APP_ORIGIN}.`);
   } else {
     lines.push("", "Re-run `raindrop cloud setup` to retry the failed agents.");
   }
@@ -194,8 +221,11 @@ function summarize(
   envGitignored: boolean,
   succeeded: boolean,
   envPath: string,
+  projectId: string | null,
 ): void {
-  process.stdout.write(buildSummaryLines(result, envGitignored, succeeded, envPath).join("\n"));
+  process.stdout.write(
+    buildSummaryLines(result, envGitignored, succeeded, envPath, projectId).join("\n"),
+  );
 }
 
 export async function cmdCloudSetup(argv: string[]): Promise<number> {
@@ -261,7 +291,7 @@ export async function cmdCloudSetup(argv: string[]): Promise<number> {
   }
 
   const succeeded = installSucceeded(result);
-  summarize(result, env.gitignored, succeeded, formatEnvPath(env.envPath));
+  summarize(result, env.gitignored, succeeded, formatEnvPath(env.envPath), args.projectId);
   return succeeded ? 0 : 1;
 }
 

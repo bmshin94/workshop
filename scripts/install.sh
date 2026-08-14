@@ -283,6 +283,12 @@ RAINDROP_NO_SETUP="${RAINDROP_SKIP_SETUP:-${RAINDROP_SKIP_INIT:-0}}"
 # Same binary, same installer; only the post-install command differs.
 RAINDROP_CLOUD="${RAINDROP_CLOUD:-0}"
 
+# Target project for cloud setup, as chosen in the dashboard before the
+# one-liner was copied. Relayed straight to `raindrop cloud setup --project`;
+# nothing downstream reads it from the environment, and it is never persisted —
+# the slug belongs in the SDK call the setup skill writes, not in config.
+RAINDROP_PROJECT_ID="${RAINDROP_PROJECT_ID:-}"
+
 # Track whether the channel was set explicitly (env var or --channel flag).
 # If the user took the default and it turns out the manifest has no entry
 # for that channel (e.g. early-stage repo with only betas published), we
@@ -309,6 +315,8 @@ while [ $# -gt 0 ]; do
     --manifest) shift; RAINDROP_MANIFEST_URL="$1" ;;
     --install-dir=*) RAINDROP_INSTALL_DIR="${1#*=}" ;;
     --install-dir) shift; RAINDROP_INSTALL_DIR="$1" ;;
+    --project=*) RAINDROP_PROJECT_ID="${1#*=}" ;;
+    --project) shift; RAINDROP_PROJECT_ID="$1" ;;
     --verbose) RAINDROP_VERBOSE=1 ;;
     --quiet) RAINDROP_QUIET=1 ;;
     --no-color) RAINDROP_NO_COLOR=1 ;;
@@ -316,7 +324,7 @@ while [ $# -gt 0 ]; do
     --cloud) RAINDROP_CLOUD=1 ;;
     -h|--help)
       cat <<'USAGE'
-Usage: install.sh [--channel=stable|beta] [--manifest=URL] [--install-dir=DIR] [--cloud] [--verbose] [--quiet] [--no-color] [--no-setup]
+Usage: install.sh [--channel=stable|beta] [--manifest=URL] [--install-dir=DIR] [--cloud] [--project=SLUG] [--verbose] [--quiet] [--no-color] [--no-setup]
 
 Environment overrides:
   RAINDROP_CHANNEL         stable | beta            (default: stable)
@@ -325,6 +333,7 @@ Environment overrides:
   RAINDROP_INSTALL_DIR     install dir              (default: ~/.raindrop/bin)
   RAINDROP_SKIP_SETUP      1 to skip automatic setup
   RAINDROP_CLOUD           1 to run `raindrop cloud setup` instead of `setup`
+  RAINDROP_PROJECT_ID      project slug for cloud setup (see --project)
   RAINDROP_VERBOSE         1 to print URLs, hashes, and platform details
   RAINDROP_QUIET           1 to suppress success output
   NO_COLOR                 disable ANSI color
@@ -343,6 +352,11 @@ binary, adds it to PATH for new terminals, then runs `raindrop setup`.
   the local debugger: runs `raindrop cloud setup` (signs in, writes the write
   key to ./.env, installs the hosted MCP + cloud skills) and does NOT start a
   daemon. Use this for the onboarding one-liner.
+
+  --project=SLUG / RAINDROP_PROJECT_ID scope events to a specific Raindrop
+  project. Cloud mode only — it is passed to `raindrop cloud setup --project`,
+  which carries it into the setup skill so the slug is written into your SDK
+  call. Ignored without --cloud.
 USAGE
       exit 0
       ;;
@@ -727,6 +741,10 @@ run_agent_setup() {
   local -a setup_cmd
   if [ "$RAINDROP_CLOUD" = "1" ]; then
     setup_cmd=(cloud setup)
+    # Cloud only: plain `raindrop setup` has no --project flag and would reject it.
+    if [ -n "$RAINDROP_PROJECT_ID" ]; then
+      setup_cmd+=(--project "$RAINDROP_PROJECT_ID")
+    fi
   else
     setup_cmd=(setup)
   fi
