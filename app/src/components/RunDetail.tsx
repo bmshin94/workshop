@@ -18,7 +18,7 @@ import { ChatFlow } from "./ChatFlow";
 import { SpanTree } from "./SpanTree";
 import { ConvoDetail } from "./ConvoDetail";
 import { RemoteConvoLoader } from "../pages/SearchPage";
-import { RotateCcw, Bookmark, Pencil, ChevronDown, ArrowDown, ChevronRight, MessageCircle, SearchX } from "lucide-react";
+import { RotateCcw, Bookmark, Download, Pencil, ChevronDown, ArrowDown, ChevronRight, MessageCircle, SearchX } from "lucide-react";
 import { LocalAgentSetupCTA, SetupReplayModal } from "./LocalAgentSetupCTA";
 import { C } from "../utils/colors";
 import { fmt, isActive } from "../utils/helpers";
@@ -444,7 +444,7 @@ function annotationToSavedPreview(annotation: Annotation): SavedAnnotationPrevie
 
 function ViewHeader({
   title, model, active, stats, allSpans, startedAt, anthropicModels,
-  run, source, isReplay, breadcrumb, fork, onAnnotateRun, deleteRedirectPath,
+  run, source, isReplay, breadcrumb, fork, onAnnotateRun, onDownload, deleteRedirectPath,
 }: {
   title: string;
   model?: string | null;
@@ -462,6 +462,7 @@ function ViewHeader({
     userMessage?: string;
   };
   onAnnotateRun?: (input: { kind: AnnotationKind; note: string }) => Promise<Annotation | null>;
+  onDownload?: () => void;
   deleteRedirectPath?: string;
 }) {
   const onBack = breadcrumb?.onBack;
@@ -630,6 +631,17 @@ function ViewHeader({
                   <MessageCircle className="h-3 w-3" />
                   Debug
                 </button>
+                {onDownload && (
+                  <button
+                    className="flex items-center gap-1.5 text-[11px] px-3 py-1 rounded-md font-medium transition-colors hover:bg-white/10"
+                    style={{ color: C.fg3, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}
+                    onClick={onDownload}
+                    title="Download trace as JSON"
+                  >
+                    <Download className="h-3 w-3" />
+                    Download
+                  </button>
+                )}
                 <button
                   ref={saveBtnRef}
                   className="flex items-center gap-1.5 text-[11px] px-3 py-1 rounded-md font-medium transition-colors"
@@ -1322,6 +1334,16 @@ export function RunDetail({ runId, routeBase, initialData, isReplay, source, onF
   const errs = spans.filter(s => s.status === "ERROR");
   const dur = run.last_updated_at - run.started_at;
   const model = spans.find(s => s.model)?.model;
+  const downloadTrace = () => {
+    const url = URL.createObjectURL(new Blob([
+      JSON.stringify({ ...data, liveEvents }, null, 2),
+    ], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `trace-${run.id}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   const tabStyle = (k: string) => ({
     padding: "8px 12px", fontSize: "12px", fontWeight: 500, cursor: "pointer" as const,
@@ -1350,6 +1372,7 @@ export function RunDetail({ runId, routeBase, initialData, isReplay, source, onF
         isReplay={isReplay}
         deleteRedirectPath={routeBase ?? "/runs"}
         onAnnotateRun={(input) => createAnnotationAndSave({ ...input, source: "user" })}
+        onDownload={downloadTrace}
         fork={onForkStarted ? {
           onFork: (msg, mode, mdl, ctx) => onForkStarted(runId, msg, mode, mdl, ctx),
           userMessage: lastUserMessage,

@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { test, expect, REPO_ROOT_PATH } from "./fixtures";
 import { readWorkshopRun, readWorkshopSpans } from "./helpers";
 
@@ -152,6 +153,27 @@ test("workshop UI: span tree + side panel render seeded run", async ({ page, wor
   await expect(page.getByText(/^Input$/).first()).toBeVisible({ timeout: 5_000 });
   await expect(page.getByText(/^Output$/).first()).toBeVisible({ timeout: 5_000 });
   await expect(page.getByText(/Fix the typo in README\.md/).first()).toBeVisible({ timeout: 5_000 });
+});
+
+test("workshop UI: download button exports the selected trace as JSON", async ({ page, workshop }) => {
+  await seedFixtures(workshop.url);
+
+  const response = await fetch(`${workshop.url}/api/runs/detail/${FIXTURE_RUN_ID}`);
+  expect(response.ok).toBe(true);
+  const expectedTrace = await response.json();
+
+  await page.goto(`${workshop.url}/runs/${FIXTURE_RUN_ID}`);
+  const downloadButton = page.getByRole("button", { name: /^download$/i });
+  await expect(downloadButton).toBeVisible({ timeout: 10_000 });
+
+  const downloadPromise = page.waitForEvent("download");
+  await downloadButton.click();
+  const download = await downloadPromise;
+
+  expect(download.suggestedFilename()).toBe(`trace-${FIXTURE_RUN_ID}.json`);
+  const downloadPath = await download.path();
+  expect(downloadPath).not.toBeNull();
+  expect(JSON.parse(readFileSync(downloadPath!, "utf8"))).toEqual(expectedTrace);
 });
 
 test("workshop UI: new run from SDK appears live in sidebar without reload", async ({ page, workshop }) => {
