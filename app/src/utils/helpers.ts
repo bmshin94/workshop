@@ -29,6 +29,16 @@ export function isActive(run: { last_updated_at: number; finished?: number | nul
   return recencyMs < INACTIVE_MS;
 }
 
+export function runDisplayName(
+  run: { id: string; display_name?: string | null; event_name: string | null; name: string | null },
+  fallbackLength = 12,
+): string {
+  return run.display_name?.trim()
+    || run.event_name?.replace(/^replay:/i, "").trim()
+    || run.name?.trim()
+    || run.id.slice(0, fallbackLength);
+}
+
 export function trunc(s: string | null | undefined, n = 300): string | null {
   if (!s) return null;
   if (s.length <= n) return s;

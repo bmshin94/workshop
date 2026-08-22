@@ -743,7 +743,7 @@ function RemoteRunDetail({ eventId, event }: { eventId: string; event?: QueryEve
   const startMs = Math.min(...spans.map(s => s.start_time_ms));
   const endMs = Math.max(...spans.map(s => s.end_time_ms));
   const run: Run = {
-    id: eventId, name: null as any, event_name: event?.event_name ?? eventId,
+    id: eventId, name: null, event_name: event?.event_name ?? eventId, display_name: null,
     user_id: event?.user_id ?? null, convo_id: event?.convo_id ?? null,
     started_at: startMs, last_updated_at: endMs,
     metadata: null as any, model: spans.find(s => s.model)?.model ?? null,

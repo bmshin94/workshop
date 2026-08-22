@@ -21,8 +21,10 @@ import { RemoteConvoLoader } from "../pages/SearchPage";
 import { RotateCcw, Bookmark, Download, Pencil, ChevronDown, ArrowDown, ChevronRight, MessageCircle, SearchX } from "lucide-react";
 import { LocalAgentSetupCTA, SetupReplayModal } from "./LocalAgentSetupCTA";
 import { C } from "../utils/colors";
-import { fmt, isActive } from "../utils/helpers";
+import { fmt, isActive, runDisplayName } from "../utils/helpers";
+import { useQueryClient } from "@tanstack/react-query";
 import { parseReplayMetadata } from "../utils/types";
+import { renameRun } from "../api/runs";
 import type { Run, Span, LiveEvent, SubAgent } from "../utils/types";
 import { saveEvent, removeSavedEvent, updateSavedEvent, isEventSaved, getSavedEvents, SavePopover, type SavedAnnotationPreview, type SavedEvent } from "../pages/SavedPage";
 import { parseMessages } from "./MessageList";
@@ -469,6 +471,7 @@ function ViewHeader({
   const parentName = breadcrumb?.parentName;
   const onFork = fork?.onFork;
   const userMessage = fork?.userMessage;
+  const queryClient = useQueryClient();
   const replayMeta = run ? parseReplayMetadata(run) : null;
   const traceModelFromMetadata = replayMeta?.replay?.model ?? null;
   const [optionsOpen, setOptionsOpen] = useState(false);
@@ -522,6 +525,15 @@ function ViewHeader({
     metadataModel: traceModelFromMetadata,
     anthropicModels,
   }), [forkModel, model, traceModelFromMetadata, anthropicModels]);
+  const handleRename = useCallback((name: string) => {
+    if (!run) return;
+    renameRun(run.id, name)
+      .then(() => Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["runs"] }),
+        queryClient.invalidateQueries({ queryKey: ["run-detail", run.id] }),
+      ]))
+      .catch(() => {});
+  }, [queryClient, run]);
 
   useEffect(() => {
     if (!optionsOpen || !run?.id || !agentConfigured) return;
@@ -583,7 +595,7 @@ function ViewHeader({
               <div className={`w-2 h-2 rounded-full flex-shrink-0 ${active ? "pulse-dot" : ""}`} style={{ background: active ? C.green : "rgba(255,255,255,0.18)" }} title={active ? "Active" : "Done"} />
               {onFork && !active ? (
                 <InlineEdit value={displayTitle}
-                  onConfirm={() => {}}
+                  onConfirm={handleRename}
                   className="text-[15px] font-semibold truncate" style={{ color: C.fg4 }}
                   inputStyle={{ fontSize: 15, fontWeight: 600, color: C.fg4 }} />
               ) : (
@@ -1304,7 +1316,7 @@ export function RunDetail({ runId, routeBase, initialData, isReplay, source, onF
           allSpans={agentSpans}
           breadcrumb={{
             onBack: () => setFocusedAgent(null),
-            parentName: run.event_name ?? run.name ?? run.id.slice(0, 12),
+            parentName: runDisplayName(run),
           }}
         />
         <div className="flex-shrink-0 flex" style={{ borderBottom: `1px solid ${C.border}`, paddingLeft: 16 }}>
@@ -1355,7 +1367,7 @@ export function RunDetail({ runId, routeBase, initialData, isReplay, source, onF
   return (
     <div className="h-full flex flex-col">
       <ViewHeader
-        title={run.event_name ?? run.name ?? run.id.slice(0, 12)}
+        title={runDisplayName(run)}
         model={model}
         active={active}
         startedAt={run.started_at}
